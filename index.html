@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Slack Webhook 메시지 전송기</title>
+    <style>
+        /* 기존 스타일 유지 */
+        body {
+            font-family: 'Arial', sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #1a73e8;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .form-group {
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: bold;
+            color: #333;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        .drop-zone {
+            border: 2px dashed #1a73e8;
+            padding: 20px;
+            text-align: center;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .drop-zone:hover {
+            background-color: #e8f0fe;
+        }
+        .drop-zone.dragover {
+            background-color: #e8f0fe;
+            border-color: #1557b0;
+        }
+        .button {
+            background-color: #1a73e8;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease;
+        }
+        .button:hover {
+            background-color: #1557b0;
+        }
+        .button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        .file-list {
+            margin-top: 10px;
+            padding: 10px;
+            background-color: #f8f9fa;
+            border-radius: 4px;
+        }
+        .success-message {
+            background-color: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            display: none;
+        }
+        .error-message {
+            background-color: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 4px;
+            margin-top: 20px;
+            display: none;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #f0f0f0;
+            border-radius: 10px;
+            margin-top: 10px;
+            display: none;
+        }
+        .progress {
+            width: 0%;
+            height: 100%;
+            background-color: #1a73e8;
+            border-radius: 10px;
+            transition: width 0.3s ease;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Slack Webhook 메시지 전송기</h1>
+        
+        <!-- URL 입력 폼 -->
+        <form id="urlForm" class="form-group">
+            <label for="url">웹사이트 주소:</label>
+            <input type="text" id="url" name="url" required>
+            <br><br>
+            <button type="submit" class="button">URL 전송</button>
+        </form>
+
+        <!-- 파일 업로드 폼 -->
+        <form id="fileForm" class="form-group">
+            <label>파일 업로드:</label>
+            <div id="dropZone" class="drop-zone">
+                파일을 여기에 드래그하거나 클릭하여 선택하세요
+                <input type="file" id="fileInput" multiple style="display: none;">
+            </div>
+            <div id="fileList" class="file-list"></div>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress" id="progress"></div>
+            </div>
+            <br>
+            <button type="submit" id="submitButton" class="button" disabled>파일 전송</button>
+        </form>
+
+        <div id="successMessage" class="success-message"></div>
+        <div id="errorMessage" class="error-message"></div>
+    </div>
+
+    <script>
+        // 전역 변수
+        let selectedFiles = [];
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+        const fileList = document.getElementById('fileList');
+        const submitButton = document.getElementById('submitButton');
+        const progressBar = document.getElementById('progressBar');
+        const progress = document.getElementById('progress');
+
+        // 드래그 앤 드롭 이벤트
+        dropZone.addEventListener('click', () => fileInput.click());
+
+        dropZone.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            dropZone.classList.add('dragover');
+        });
+
+        dropZone.addEventListener('dragleave', () => {
+            dropZone.classList.remove('dragover');
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            e.preventDefault();
+            dropZone.classList.remove('dragover');
+            handleFiles(e.dataTransfer.files);
+        });
+
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        function handleFiles(files) {
+            selectedFiles = Array.from(files);
+            updateFileList();
+            submitButton.disabled = selectedFiles.length === 0;
+        }
+
+        function updateFileList() {
+            fileList.innerHTML = selectedFiles
+                .map(file => `<div>${file.name} (${(file.size / 1024).toFixed(1)}KB)</div>`)
+                .join('');
+        }
+
+        // URL 전송
+        document.getElementById('urlForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const url = document.getElementById('url').value;
+            
+            try {
+                const response = await fetch('/send-url', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ url })
+                });
+
+                if (response.ok) {
+                    showMessage('success', 'URL이 성공적으로 전송되었습니다!');
+                    document.getElementById('url').value = '';
+                } else {
+                    throw new Error('URL 전송 실패');
+                }
+            } catch (error) {
+                showMessage('error', '전송 실패: ' + error.message);
+            }
+        });
+
+        // 파일 전송
+        document.getElementById('fileForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (selectedFiles.length === 0) return;
+
+            const formData = new FormData();
+            selectedFiles.forEach(file => {
+                formData.append('files', file);
+            });
+
+            submitButton.disabled = true;
+            progressBar.style.display = 'block';
+            progress.style.width = '0%';
+
+            try {
+                const response = await fetch('/send-files', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    showMessage('success', '파일이 성공적으로 전송되었습니다!');
+                    resetForm();
+                } else {
+                    throw new Error(result.message || '파일 전송 실패');
+                }
+            } catch (error) {
+                showMessage('error', '전송 실패: ' + error.message);
+            } finally {
+                submitButton.disabled = false;
+                progressBar.style.display = 'none';
+            }
+        });
+
+        function showMessage(type, message) {
+            const successMessage = document.getElementById('successMessage');
+            const errorMessage = document.getElementById('errorMessage');
+
+            if (type === 'success') {
+                successMessage.textContent = message;
+                successMessage.style.display = 'block';
+                errorMessage.style.display = 'none';
+            } else {
+                errorMessage.textContent = message;
+                errorMessage.style.display = 'block';
+                successMessage.style.display = 'none';
+            }
+
+            setTimeout(() => {
+                successMessage.style.display = 'none';
+                errorMessage.style.display = 'none';
+            }, 5000);
+        }
+
+        function resetForm() {
+            fileInput.value = '';
+            selectedFiles = [];
+            updateFileList();
+            submitButton.disabled = true;
+            progress.style.width = '0%';
+            progressBar.style.display = 'none';
+        }
+    </script>
+</body>
+</html>
