@@ -129,5 +129,4 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
-slack_info.txt
-webhook.txt
+slack_info.json

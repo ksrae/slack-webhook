@@ -1,3 +1,5 @@
+// server.js
+
 const express = require('express');
 const bodyParser = require('body-parser');
 const multer = require('multer');
@@ -19,19 +21,12 @@ app.use(bodyParser.json());
 
 // Slack 정보 읽기
 const getSlackInfo = () => {
-    const filePath = path.join(__dirname, 'slack_info.txt');
-    const lines = fs.readFileSync(filePath, 'utf8').split('\n');
-    const token = lines[0].trim();
-    const channelId = lines[1].trim();
-    return { token, channelId };
+    const filePath = path.join(__dirname, 'slack_info.json');
+    const jsonData = fs.readFileSync(filePath, 'utf8');
+    return JSON.parse(jsonData);
 };
 
-const { token: SLACK_TOKEN, channelId: SLACK_CHANNEL_ID } = getSlackInfo();
-
-const getWebhookUrl = () => {
-    const filePath = path.join(__dirname, 'webhook.txt');
-    return fs.readFileSync(filePath, 'utf8').trim();
-};
+const allSlackInfo = getSlackInfo();
 
 // HTML 파일을 제공하는 라우트
 app.get('/', (req, res) => {
@@ -43,7 +38,7 @@ app.post('/send-url', async (req, res) => {
     const { url } = req.body;
 
     try {
-        const webhookUrl = getWebhookUrl();
+        const webhookUrl = allSlackInfo["pushpush"]["webhookUrl"];
         const payload = {
             text: `새 웹사이트 주소가 입력되었습니다: ${url}`
         };
@@ -59,13 +54,17 @@ app.post('/send-url', async (req, res) => {
 // 파일 업로드 로직
 async function uploadFileToSlack(file) {
     try {
+        // 파일명 디코딩
+        const originalName = decodeURIComponent(file.originalname); // 파일명을 UTF-8 디코딩
+        console.log(`디코딩된 파일명: ${originalName}`);
+
         // Step 1: Get Upload URL
         const urlResponse = await axios.get('https://slack.com/api/files.getUploadURLExternal', {
             headers: {
-                Authorization: `Bearer ${SLACK_TOKEN}`
+                Authorization: `Bearer ${allSlackInfo["pushpush"]["token"]}`,
             },
             params: {
-                filename: file.originalname,
+                filename: originalName, // 디코딩된 파일명 사용
                 length: file.size
             }
         });
@@ -80,9 +79,11 @@ async function uploadFileToSlack(file) {
         const bufferStream = new stream.PassThrough();
         bufferStream.end(file.buffer);
 
+        const encodedFilename = encodeURIComponent(originalName); // 다시 인코딩 처리 (Slack API 요구사항에 맞출 경우 필요)
+
         const formData = new FormData();
         formData.append('file', bufferStream, {
-            filename: file.originalname,
+            filename: encodedFilename, // 다시 인코딩된 파일명을 전달
             contentType: file.mimetype,
             knownLength: file.size,
         });
@@ -100,14 +101,14 @@ async function uploadFileToSlack(file) {
                 files: [
                     {
                         id: file_id,
-                        title: file.originalname
+                        title: originalName // 디코딩된 원본 파일명 유지
                     }
                 ],
-                channel_id: SLACK_CHANNEL_ID
+                channel_id: allSlackInfo["pushpush"]["channelId"]
             },
             {
                 headers: {
-                    Authorization: `Bearer ${SLACK_TOKEN}`,
+                    Authorization: `Bearer ${allSlackInfo["pushpush"]["token"]}`,
                     'Content-Type': 'application/json'
                 }
             }
@@ -121,7 +122,7 @@ async function uploadFileToSlack(file) {
         }
 
         return {
-            filename: file.originalname,
+            filename: originalName,
             success: true,
         };
     } catch (error) {
