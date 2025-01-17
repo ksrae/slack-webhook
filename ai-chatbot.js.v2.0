@@ -1,12 +1,7 @@
-import pkg from '@slack/bolt';
-const { App } = pkg;
-import AIClient from './aiClient.js';
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const { App } = require('@slack/bolt');
+const fs = require('fs');
+const path = require('path');
+const AIClient = require('./aiClient');
 
 // Slack 정보 읽기
 const getSlackInfo = () => {
@@ -38,14 +33,13 @@ app.event('app_mention', async ({ event, say }) => {
     const message = event?.text.replace(/<[^>]*>/g, '').trim(); // Slack 메시지에서 태그 제거
     console.log('Received message:', message);
 
-    // 응답을 실시간으로 처리하는 함수
-    const sendProgress = (text) => {
-      say(text); // Slack에 실시간으로 메시지 전송
-    };
+    // AI 응답 생성
+    const aiResponse = await aiClient.getResponse(message);
 
-    // AI 응답 생성 (스트리밍)
-    await aiClient.getResponse(message, sendProgress);
+    console.log('AI Response:', aiResponse);
 
+    // Slack에 응답 보내기
+    await say(aiResponse);
   } catch (error) {
     console.error('Error handling app_mention event:', error);
     await say('Something went wrong. Please try again later.');
