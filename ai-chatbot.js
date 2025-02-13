@@ -40,7 +40,9 @@ app.event('app_mention', async ({ event, say }) => {
 
     // 응답을 실시간으로 처리하는 함수
     const sendProgress = (text) => {
-      say(text); // Slack에 실시간으로 메시지 전송
+      if(text) {
+        say(text); // Slack에 실시간으로 메시지 전송
+      }
     };
 
     // AI 응답 생성 (스트리밍)
